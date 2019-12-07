@@ -9,3 +9,12 @@ Once rust has been [installed](https://www.rust-lang.org/tools/install), simply 
 cargo install --git https://github.com/findelabs/rust-redis-proxy.git
 ```
 
+### Usage
+
+The proxy requires three arguments for operation:
+
+  - listen: Specify the listening socket
+  - master: Specify the redis master name
+  - sentinel: Specify the redis sentinel socket
+
+There is an optional --debug flag also available, which shows a little more info, such as incoming connections.
