@@ -223,8 +223,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap();
 
             match redis_master_health(&known_master_socket) {
-                Ok(p) => { println!("{} - Master Health: {} returned: {}", get_time(), known_master_socket, p);
-                    thread::sleep(Duration::from_millis(10000)) },
+                Ok(p) => { 
+                    if enable_debug {
+                        println!("{} - Master Health: {} returned: {}", get_time(), known_master_socket, p);
+                    };
+                    thread::sleep(Duration::from_millis(10000)) 
+                },
                 Err(e) => { println!("{} - Master Health: {} error: {}", get_time(), known_master_socket, e);
                     thread::sleep(Duration::from_millis(1000)) }
             };
