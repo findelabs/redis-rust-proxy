@@ -1,0 +1,12 @@
+[package]
+name = "rust-redis-proxy"
+version = "0.1.0"
+authors = ["Verticaleap"]
+edition = "2018"
+
+[dependencies]
+tokio = "0.1.8"
+getopts = "0.2"
+redis = "0.13.0"
+chrono = "0.4.10"
+net2 = "0.2.33"
