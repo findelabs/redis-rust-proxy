@@ -1,5 +1,5 @@
 [package]
-name = "rust-redis-proxy"
+name = "redis-rust-proxy"
 version = "0.1.1"
 authors = ["Verticaleap"]
 edition = "2018"
