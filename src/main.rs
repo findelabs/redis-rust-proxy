@@ -6,7 +6,7 @@ use std::env;
 use std::sync::Arc;
 use std::error::Error;
 use std::net::SocketAddr;
-use std::sync::RwLock;
+use tokio::sync::RwLock;
 use env_logger::{Builder, Target};
 use log::LevelFilter;
 use chrono::Local;
@@ -17,6 +17,19 @@ use rand::{Rng, thread_rng};
 use rand::distributions::Alphanumeric;
 
 mod redis_tools;
+
+#[derive(Hash, Eq, PartialEq, Debug, Clone)]
+pub struct Inner {
+    master: String,
+    sentinel_addr: SocketAddr,
+    last_known_master: SocketAddr,
+    discovered_masters: Vec<SocketAddr>
+}
+
+#[derive(Debug, Clone)]
+pub struct State {
+    pub inner: Arc<RwLock<Inner>>,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -98,8 +111,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
+    // Create initial State
+    let state = Inner {
+        master: master.clone(),
+        sentinel_addr: sentinel_addr,
+        last_known_master: current_master_addr,
+        discovered_masters: vec![current_master_addr]
+    };
+
     // Create shared resource in order to safely pass the current master socket
-    let resource = Arc::new(RwLock::new(current_master_addr.clone()));
+    let resource = State {
+        inner: Arc::new(RwLock::new(state))
+    };
 
     let net2_socket = TcpBuilder::new_v4().unwrap()
         .reuse_address(true).unwrap()
@@ -120,7 +143,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         log::info!("{} - New connection from {}", &id, &client);
 
-        let transfer = redis_tools::transfer(inbound, resource.clone(), master.clone(), sentinel_addr.clone(), id.clone()).map(move |r| {
+        let transfer = redis_tools::transfer(inbound, resource.clone(), id.clone()).map(move |r| {
             if let Err(e) = r {
                 log::info!("{} - Connection failed; {}", id, e);
             }

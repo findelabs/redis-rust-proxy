@@ -1,28 +1,32 @@
 use std::net::SocketAddr;
 use redis::{parse_redis_url};
 use tokio::net::TcpStream;
-use std::sync::Arc;
-use std::sync::RwLock;
 use tokio::io::AsyncWriteExt;
 use tokio::io;
 use futures::future::try_join;
 use std::error::Error;
-use std::process::exit;
+use redis::Value;
+use redis::RedisError;
+//use std::process::exit;
 
+use crate::State;
 
-pub fn get_redis_master_health(master_addr: &SocketAddr) -> Result<String, redis::RedisError> {
+// Find out if cache is the master, and return None if any errors are encountered
+pub fn is_master(master_addr: &SocketAddr) -> Result<bool, Box<dyn Error>> {
     let master_connection_format = format!("redis://{}", master_addr);
     let master_connection_str : &str = &master_connection_format[..];
-    let master_connection_url = parse_redis_url(&master_connection_str).unwrap();
+    let master_connection_url = parse_redis_url(&master_connection_str).expect("failed to parse redis url");
 
-    let client = redis::Client::open(master_connection_url).unwrap();
+    let client = redis::Client::open(master_connection_url)?;
     let mut con = client.get_connection()?;
-    let healthcheck = redis::cmd("PING").query(&mut con);
 
-    match healthcheck {
-        Ok(p) => return Ok(p),
-        Err(e) => return Err(e)
-    };
+    let info: redis::InfoDict = redis::cmd("INFO").query(&mut con)?;
+    let role: String = info.get("role").expect("Could not get role from info");
+
+    match role.as_str() {
+        "master" => Ok(true),
+        _ => Ok(false)
+    }
 }
 
 pub fn get_current_master(sentinel_addr: &SocketAddr, master: &str, id: &str) -> Result<SocketAddr, Box<dyn Error>> {
@@ -48,38 +52,44 @@ pub fn get_current_master(sentinel_addr: &SocketAddr, master: &str, id: &str) ->
     Ok(current_master_socket)
 }
 
-pub async fn transfer<'a>(mut inbound: TcpStream, resource: Arc<RwLock<SocketAddr>>, master: String, sentinel_addr: SocketAddr, id: String) -> Result<(), Box<dyn Error>> {
+//pub async fn transfer<'a>(mut inbound: TcpStream, resource: Arc<RwLock<SocketAddr>>, master: String, sentinel_addr: SocketAddr, id: String) -> Result<(), Box<dyn Error + Send>> {
+pub async fn transfer(mut inbound: TcpStream, resource: State, id: String) -> Result<(), Box<dyn Error + Sync + Send>> {
 
-    let known_master_socket = resource
-        .read()
-        .unwrap()
-        .to_string()
-        .parse::<SocketAddr>()
-        .unwrap();
+    let resource_read = resource.inner.read().await;
+
+    let known_master_socket = resource_read.last_known_master;
 
     // Get current master address, and update resource if socket has changed
-    let current_master_addr = match get_current_master(&sentinel_addr, &master, &id) {
-        Ok(socket) => { 
-            if socket != known_master_socket {
-                let mut resource_locked = match resource.write() {
-                    Ok(r) => r,
-                    Err(e) => {
-                        log::info!("{} - Failed unlocking shared resourcing: {}", id, e);
-                        log::info!("Exiting...");
-                        exit(2)
-                    }
-                };
-                *resource_locked = socket;
-                log::info!("{} - Updated current master address to {}", id, &socket);
-            };
-            socket
-        },
+    let current_master_addr = match get_current_master(&resource_read.sentinel_addr, &resource_read.master, &id) {
+        Ok(socket) => socket, 
         Err(e) => { 
             log::info!("{} - Error getting current master from sentinel: {}", id, e);
-            log::info!("{} - Using last known good master socket: {}", id, known_master_socket);
-            known_master_socket
+            log::info!("{} - Manually checking if {} is still the master", id, known_master_socket);
+
+            match is_master(&known_master_socket) {
+                Ok(true) => { 
+                    log::info!("{} - It appears that {} is still the master", id, &known_master_socket);
+                    known_master_socket
+                },
+                Ok(false) => {
+                    log::info!("{} - It appears that {} is no longer the master", id, &known_master_socket);
+                    known_master_socket
+                },
+                Err(e) => {
+                    log::info!("{} - {} error checking for master: {}", id, &known_master_socket, e);
+                    known_master_socket
+                },
+            }
         }
     };  
+
+    // Update current master in State
+    if current_master_addr != known_master_socket {
+        let mut resource_locked = resource.inner.write().await;
+        resource_locked.last_known_master = current_master_addr;
+        resource_locked.discovered_masters.push(current_master_addr);
+        log::info!("{} - Updated current master address to {}", id, &current_master_addr);
+    };
 
     let mut outbound = TcpStream::connect(current_master_addr).await?;
 
