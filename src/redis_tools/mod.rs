@@ -30,7 +30,7 @@ pub fn is_master(master_addr: &SocketAddr) -> Result<bool, Box<dyn Error>> {
 }
 
 pub fn get_current_master(sentinel_addr: &SocketAddr, master: &str, id: &str) -> Result<SocketAddr, Box<dyn Error>> {
-
+    
     let sentinel_connection_format = format!("redis://{}", sentinel_addr);
     let sentinel_connection_str : &str = &sentinel_connection_format[..];
     let sentinel_connection_url = parse_redis_url(&sentinel_connection_str).unwrap();
@@ -52,6 +52,32 @@ pub fn get_current_master(sentinel_addr: &SocketAddr, master: &str, id: &str) ->
     Ok(current_master_socket)
 }
 
+pub fn find_master(discovered_masters: Vec<SocketAddr>, id: &str) -> Option<SocketAddr> {
+
+    let masters_pretty: Vec<String> = discovered_masters.iter()
+        .map(|v| v.to_string())
+        .collect();
+
+    log::info!("{} - Searching for the master amongst {}", id, &masters_pretty.join(", "));
+    for master in discovered_masters {
+        match is_master(&master) {
+            Ok(true) => { 
+                log::info!("{} - Found the master: {}", id, &master);
+                return Some(master)
+            },
+            Ok(false) => {
+                log::info!("{} - It appears that {} is not the master", id, &master);
+                continue
+            },
+            Err(e) => {
+                log::info!("{} - {} error checking for master: {}", id, &master, e);
+                continue
+            },
+        };
+    }
+    None
+}
+
 //pub async fn transfer<'a>(mut inbound: TcpStream, resource: Arc<RwLock<SocketAddr>>, master: String, sentinel_addr: SocketAddr, id: String) -> Result<(), Box<dyn Error + Send>> {
 pub async fn transfer(mut inbound: TcpStream, resource: State, id: String) -> Result<(), Box<dyn Error + Sync + Send>> {
 
@@ -64,26 +90,31 @@ pub async fn transfer(mut inbound: TcpStream, resource: State, id: String) -> Re
         Ok(socket) => socket, 
         Err(e) => { 
             log::info!("{} - Error getting current master from sentinel: {}", id, e);
-            log::info!("{} - Manually checking if {} is still the master", id, known_master_socket);
+            log::info!("{} - Checking if {} is still the master", id, known_master_socket);
 
+            // First, check if the last known master is STILL the master. If it is not,
+            // then go through all discovered masters to find the current master
             match is_master(&known_master_socket) {
-                Ok(true) => { 
-                    log::info!("{} - It appears that {} is still the master", id, &known_master_socket);
+                Ok(true) => {
+                    log::info!("{} - Looks like {} is still the master", id, &known_master_socket);
                     known_master_socket
                 },
-                Ok(false) => {
-                    log::info!("{} - It appears that {} is no longer the master", id, &known_master_socket);
-                    known_master_socket
-                },
-                Err(e) => {
-                    log::info!("{} - {} error checking for master: {}", id, &known_master_socket, e);
-                    known_master_socket
-                },
+                _ => {
+                    log::info!("{} - It does not appear that {} is the master", id, &known_master_socket);
+                    match find_master(resource_read.discovered_masters.clone(), &id) {
+                        Some(s) => s,
+                        None => {
+                            log::info!("{} - Could not find current master, defaulting to last master: {}", id, known_master_socket);
+                            known_master_socket
+                        }
+                    }
+                }
             }
         }
     };  
 
     // Update current master in State
+    drop(resource_read);
     if current_master_addr != known_master_socket {
         let mut resource_locked = resource.inner.write().await;
         resource_locked.last_known_master = current_master_addr;
