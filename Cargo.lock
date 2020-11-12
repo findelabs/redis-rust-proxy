@@ -778,21 +778,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proxy"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clap",
- "env_logger",
- "futures",
- "log",
- "net2",
- "rand",
- "redis",
- "tokio",
-]
-
-[[package]]
 name = "quick-error"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -867,6 +852,21 @@ dependencies = [
  "tokio",
  "tokio-util",
  "url",
+]
+
+[[package]]
+name = "redis-rust-proxy"
+version = "0.2.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "env_logger",
+ "futures",
+ "log",
+ "net2",
+ "rand",
+ "redis",
+ "tokio",
 ]
 
 [[package]]
