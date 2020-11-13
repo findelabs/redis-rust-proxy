@@ -16,4 +16,4 @@ ENTRYPOINT ["/app/entrypoint.sh"]
 
 EXPOSE 6739
 
-CMD ["/app/bin/redis-rust-proxy"]
+#CMD ["/app/bin/redis-rust-proxy"]
