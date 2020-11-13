@@ -15,6 +15,7 @@ use std::process::exit;
 use std::iter;
 use rand::{Rng, thread_rng};
 use rand::distributions::Alphanumeric;
+use std::net::ToSocketAddrs;
 
 mod redis_tools;
 
@@ -94,10 +95,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let listen_addr = opts.value_of("listen").unwrap().to_string();
     let master = opts.value_of("master").unwrap().to_string();
-    let sentinel_addr = opts.value_of("sentinel")
+
+    let sentinel_addr_resolve = opts.value_of("sentinel")
                         .unwrap()
                         .to_string()
-                        .parse::<SocketAddr>()?;
+                        .to_socket_addrs();
+
+    let sentinel_addr = match sentinel_addr_resolve {
+        Ok(mut address) => {
+            address.next().unwrap()
+        },
+        Err(e) => {
+            log::error!("Error resolving sentinel address: {}", e);
+            exit(2)
+        }
+    };
+            
+//                        .expect("Could not resolve sentinel address provided")
+//                        .next()
+//                        .unwrap();
+
 
     // Get current master, and save into resource
     let current_master_addr = match redis_tools::get_current_master(&sentinel_addr, &master, &"start") {

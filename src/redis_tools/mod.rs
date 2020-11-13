@@ -5,9 +5,6 @@ use tokio::io::AsyncWriteExt;
 use tokio::io;
 use futures::future::try_join;
 use std::error::Error;
-use redis::Value;
-use redis::RedisError;
-//use std::process::exit;
 
 use crate::State;
 
