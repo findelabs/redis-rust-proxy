@@ -48,6 +48,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .required(true)
                 .value_name("MASTER")
                 .help("the sentinel's name for the cache")
+                .env("MASTER")
                 .takes_value(true),
         )
         .arg(
@@ -58,6 +59,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .help("listening socket")
                 .required(false)
                 .default_value("0.0.0.0:6379")
+                .env("LISTEN")
                 .takes_value(true),
         )
         .arg(
@@ -66,6 +68,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .long("sentinel")
                 .help("sentinel address")
                 .required(true)
+                .env("SENTINEL")
                 .takes_value(true),
         )
         .arg(
