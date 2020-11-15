@@ -1,0 +1,28 @@
+version: "3.2"
+services:
+  redis-master:
+    image: "redis:alpine"
+    command: redis-server /data/redis.conf
+    volumes:
+      - ./master.conf:/data/redis.conf
+  redis-slave:
+    image: "redis:alpine"
+    command: redis-server /data/redis.conf
+    volumes:
+      - ./slave.conf:/data/redis.conf
+  redis-sentinel:
+    image: "redis:alpine"
+    command: redis-server /data/sentinel.conf --sentinel
+    volumes:
+      - ./sentinel.conf:/data/sentinel.conf:rw
+  redis-proxy:
+    image: "findelabs/redis-rust-proxy:0.2.2"
+    environment:
+    - LISTEN=0.0.0.0:6379
+    - MASTER=mymaster
+    - SENTINEL=redis-sentinel:26379
+    - SENTINEL_TIMEOUT=1
+    ports:
+    - 6379:6379
+    depends_on:
+    - redis-sentinel

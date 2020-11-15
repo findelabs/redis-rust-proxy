@@ -206,7 +206,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     log::info!("{} - Connection completed", id);
                 }
                 Err(e) => {
-                    log::info!("{} - Connection failed; {}", id, e);
+                    log::info!("{} - Connection failed: {}", id, e);
                 }
             };
         });
