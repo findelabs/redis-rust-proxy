@@ -164,13 +164,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
+    // Created discovered_masters, and add any connected slaves
+    let discovered_masters = match redis_tools::get_slave(&current_master_addr) {
+        Ok(slave) => {
+            log::info!("Discovered slave connected to master: {}", &slave);
+            vec![current_master_addr, slave]
+        },
+        Err(_) => vec![current_master_addr]
+    };
+
     // Create initial State
     let state = Inner {
         master: master.clone(),
         sentinel_addr,
         sentinel_timeout,
         last_known_master: current_master_addr,
-        discovered_masters: vec![current_master_addr],
+        discovered_masters
     };
 
     // Create shared resource in order to safely pass the current master socket
@@ -188,7 +197,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .unwrap();
 
     let mut listener = TcpListener::from_std(net2_socket)?;
-
     log::info!("Listening on: {}", listen_addr);
 
     while let Ok((inbound, client)) = listener.accept().await {

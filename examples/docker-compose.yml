@@ -10,13 +10,19 @@ services:
     command: redis-server /data/redis.conf
     volumes:
       - ./slave.conf:/data/redis.conf
+    depends_on:
+    - redis-master
   redis-sentinel:
     image: "redis:alpine"
     command: redis-server /data/sentinel.conf --sentinel
     volumes:
       - ./sentinel.conf:/data/sentinel.conf:rw
+    depends_on:
+    - redis-master
+    - redis-slave
   redis-proxy:
     image: "findelabs/redis-rust-proxy:0.2.2"
+    command: --listen 0.0.0.0:6379 --master mymaster --sentinel redis-sentinel:26379
     environment:
     - LISTEN=0.0.0.0:6379
     - MASTER=mymaster

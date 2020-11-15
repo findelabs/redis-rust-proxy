@@ -3,11 +3,30 @@ use redis::parse_redis_url;
 use std::error::Error;
 use std::net::SocketAddr;
 use std::time::Duration;
+use std::collections::HashMap;
 use tokio::io;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
+use std::fmt;
 
 use crate::State;
+
+#[derive(Debug)]
+pub enum RedisToolsError{
+//  RedisConError,
+  MasterNoSlave,
+}
+
+impl std::error::Error for RedisToolsError {}
+
+impl fmt::Display for RedisToolsError {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+//      RedisToolsError::RedisConError => write!(f, "Could not connect to cache"),
+      RedisToolsError::MasterNoSlave => write!(f, "Master has no slave"),
+    }
+  }
+}
 
 // Find out if cache is the master, and return None if any errors are encountered
 pub fn is_master(master_addr: &SocketAddr) -> Result<bool, Box<dyn Error>> {
@@ -25,6 +44,41 @@ pub fn is_master(master_addr: &SocketAddr) -> Result<bool, Box<dyn Error>> {
     match role.as_str() {
         "master" => Ok(true),
         _ => Ok(false),
+    }
+}
+
+// Return connected slave to cache
+pub fn get_slave(master_addr: &SocketAddr) -> Result<SocketAddr, Box<dyn Error>> {
+    let master_connection_format = format!("redis://{}", master_addr);
+    let master_connection_str: &str = &master_connection_format[..];
+    let master_connection_url =
+        parse_redis_url(&master_connection_str).expect("failed to parse redis url");
+
+    let client = redis::Client::open(master_connection_url)?;
+    let mut con = client.get_connection()?;
+
+    let info: redis::InfoDict = redis::cmd("INFO").query(&mut con)?;
+    let slave0_map = match info.get::<String>("slave0") {
+        Some(v) => {
+            let items: HashMap<String, String> = v.split(",")
+                .map(|x| { 
+                    let vec: Vec<String> = x.split("=").map(|v| v.to_string()).collect();
+                    (vec[0].to_string(),vec[1].to_string())
+                }).collect();
+            items
+        },
+        None => HashMap::new()
+    };
+    
+    let ip = slave0_map.get("ip");
+    let port = slave0_map.get("port");
+
+    match (ip,port) {
+        (Some(ip), Some(port)) => {
+            let socket = format!("{}:{}", ip, port);
+            Ok(socket.parse::<SocketAddr>()?)
+        },
+        _ => Err(Box::new(RedisToolsError::MasterNoSlave))
     }
 }
 
@@ -143,11 +197,28 @@ pub async fn transfer(
     // Drop rwlock, to free up more connections
     drop(resource_read);
 
-    // Update current master in State
+    // Update current master in State and check for new slaves
     if current_master_addr != known_master_socket {
         let mut resource_locked = resource.inner.write().await;
+
+        // Update current master
         resource_locked.last_known_master = current_master_addr;
+
+        // Update discovered_masters
         resource_locked.discovered_masters.push(current_master_addr);
+
+        // Check for any new connected slave
+        if let Ok(slave) = get_slave(&current_master_addr) {
+            if !resource_locked.discovered_masters.contains(&slave) {
+                log::info!(
+                    "{} - Added slave {} to discovered caches",
+                    id,
+                    &slave.to_string()
+                );
+                resource_locked.discovered_masters.push(slave);
+            };
+        };
+
         log::info!(
             "{} - Updated current master address to {}",
             id,
