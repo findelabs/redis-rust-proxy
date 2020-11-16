@@ -108,6 +108,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     log::info!("Listening on: {}", listen_addr);
 
     while let Ok((inbound, client)) = listener.accept().await {
+        // Create client id
         let mut rng = thread_rng();
         let id: String = iter::repeat(())
             .map(|()| rng.sample(Alphanumeric))

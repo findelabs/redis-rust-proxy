@@ -5,8 +5,6 @@ services:
     command: redis-server /data/redis.conf
     volumes:
       - ./master.conf:/data/redis.conf
-    ports:
-    - 6378:6379
   redis-slave:
     image: "redis:alpine"
     command: redis-server /data/redis.conf
@@ -22,8 +20,6 @@ services:
     depends_on:
     - redis-master
     - redis-slave
-    ports:
-    - 26379:26379
   redis-proxy:
     image: "findelabs/redis-rust-proxy:0.2.4"
     environment:

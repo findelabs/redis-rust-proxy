@@ -1,11 +1,11 @@
-use tokio::sync::RwLock;
-use std::time::Duration;
-use std::sync::Arc;
+use clap::ArgMatches;
+use std::error::Error;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
-use clap::{ArgMatches};
 use std::process::exit;
-use std::error::Error;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::RwLock;
 
 use crate::redis_tools;
 
@@ -25,7 +25,6 @@ pub struct State {
 
 impl State {
     pub fn new(opts: ArgMatches) -> Result<Self, Box<dyn Error>> {
-
         // Get master name
         let master = opts.value_of("master").unwrap().to_string();
 
@@ -35,7 +34,7 @@ impl State {
             .unwrap()
             .to_string()
             .to_socket_addrs();
-    
+
         // Get resolved sentinel address
         let sentinel_addr = match sentinel_addr_resolve {
             Ok(mut address) => address.next().unwrap(),
@@ -44,7 +43,7 @@ impl State {
                 exit(2)
             }
         };
-    
+
         // Get sentinel timeout u64
         let sentinel_timeout_u64 = match opts
             .value_of("sentinel_timeout")
@@ -61,7 +60,7 @@ impl State {
                 exit(2)
             }
         };
-    
+
         // Get sentinel timeout Duration
         let sentinel_timeout = Duration::from_millis(sentinel_timeout_u64);
 
@@ -87,21 +86,21 @@ impl State {
             Ok(slave) => {
                 log::info!("Discovered slave connected to master: {}", &slave);
                 vec![current_master_addr, slave]
-            },
-            Err(_) => vec![current_master_addr]
+            }
+            Err(_) => vec![current_master_addr],
         };
 
         // Create initial State
         let state = Inner {
-            master: master.clone(),
+            master,
             sentinel_addr,
             sentinel_timeout,
             last_known_master: current_master_addr,
-            discovered_masters
+            discovered_masters,
         };
 
-        Ok(Self{
-            inner: Arc::new(RwLock::new(state))
+        Ok(Self {
+            inner: Arc::new(RwLock::new(state)),
         })
     }
 }

@@ -1,31 +1,31 @@
 use futures::future::try_join;
 use redis::parse_redis_url;
+use std::collections::HashMap;
 use std::error::Error;
+use std::fmt;
 use std::net::SocketAddr;
 use std::time::Duration;
-use std::collections::HashMap;
 use tokio::io;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
-use std::fmt;
 
 use crate::state;
 
 #[derive(Debug)]
-pub enum RedisToolsError{
-//  RedisConError,
-  MasterNoSlave,
+pub enum RedisToolsError {
+    //  RedisConError,
+    MasterNoSlave,
 }
 
 impl std::error::Error for RedisToolsError {}
 
 impl fmt::Display for RedisToolsError {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    match self {
-//      RedisToolsError::RedisConError => write!(f, "Could not connect to cache"),
-      RedisToolsError::MasterNoSlave => write!(f, "Master has no slave"),
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            //      RedisToolsError::RedisConError => write!(f, "Could not connect to cache"),
+            RedisToolsError::MasterNoSlave => write!(f, "Master has no slave"),
+        }
     }
-  }
 }
 
 // Find out if cache is the master, and return None if any errors are encountered
@@ -60,25 +60,27 @@ pub fn get_slave(master_addr: &SocketAddr) -> Result<SocketAddr, Box<dyn Error>>
     let info: redis::InfoDict = redis::cmd("INFO").query(&mut con)?;
     let slave0_map = match info.get::<String>("slave0") {
         Some(v) => {
-            let items: HashMap<String, String> = v.split(",")
-                .map(|x| { 
-                    let vec: Vec<String> = x.split("=").map(|v| v.to_string()).collect();
-                    (vec[0].to_string(),vec[1].to_string())
-                }).collect();
+            let items: HashMap<String, String> = v
+                .split(',')
+                .map(|x| {
+                    let vec: Vec<String> = x.split('=').map(|v| v.to_string()).collect();
+                    (vec[0].to_string(), vec[1].to_string())
+                })
+                .collect();
             items
-        },
-        None => HashMap::new()
+        }
+        None => HashMap::new(),
     };
-    
+
     let ip = slave0_map.get("ip");
     let port = slave0_map.get("port");
 
-    match (ip,port) {
+    match (ip, port) {
         (Some(ip), Some(port)) => {
             let socket = format!("{}:{}", ip, port);
             Ok(socket.parse::<SocketAddr>()?)
-        },
-        _ => Err(Box::new(RedisToolsError::MasterNoSlave))
+        }
+        _ => Err(Box::new(RedisToolsError::MasterNoSlave)),
     }
 }
 
