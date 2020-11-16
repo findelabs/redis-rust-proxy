@@ -1,6 +1,6 @@
-# redis-rust-proxy
+# Redis Proxy
 
-This is a simple rust network proxy for master-slave redis deployments. The rust proxy queries the sentinel to be aware of the master's location at all times, then proxies incoming connections to the current master cache. 
+This is a simple network proxy for use in master-slave-sentinel redis deployments. The rust proxy queries the sentinel for each incoming client, then proxies incoming connections to the current master cache. The proxy also keeps track of known caches, to assist the proxy when the sentinel is unavailable. 
 
 ### Installation
 
@@ -9,12 +9,29 @@ Once rust has been [installed](https://www.rust-lang.org/tools/install), simply 
 cargo install --git https://github.com/findelabs/redis-rust-proxy.git
 ```
 
-### Usage
+### Arguments
 
-The proxy requires three arguments for operation:
+```
+# Required
+--master: 
+    Specify the redis master name, env MASTER.
+--sentinel: 
+    Specify the redis sentinel socket, env SENTINEL.
 
-  - listen: Specify the listening socket
-  - master: Specify the redis master name
-  - sentinel: Specify the redis sentinel socket
+# Optional
+--listen: 
+    Specify the listening socket for the proxy, env LISTEN. Default 0.0.0.0:6379
+--sentinel_timeout: 
+    Change the sentinel timeout, env SENTINEL_TIMEOUT. Default 10 (ms)
+```
 
-There is an optional --debug flag also available, which shows a little more info, such as incoming connections.
+### Testing
+
+You can deploy a test cluster with a master, slave, sentinel, and proxy, with the docker-compose.yml file under examples/. Creation of the cluster is as simple as:
+```
+# Install docker-compose
+sudo wget -O /usr/local/bin/docker-compose https://github.com/docker/compose/releases/download/1.27.4/docker-compose-Linux-x86_64 && sudo chmod +x /usr/local/bin/docker-compose
+
+# Run docker-compose
+sudo docker-compose -f examples/docker-compose.yml up --build --remove-orphans
+```
