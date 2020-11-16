@@ -9,7 +9,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use std::fmt;
 
-use crate::State;
+use crate::state;
 
 #[derive(Debug)]
 pub enum RedisToolsError{
@@ -143,7 +143,7 @@ pub fn find_master(discovered_masters: Vec<SocketAddr>, id: &str) -> Option<Sock
 //pub async fn transfer<'a>(mut inbound: TcpStream, resource: Arc<RwLock<SocketAddr>>, master: String, sentinel_addr: SocketAddr, id: String) -> Result<(), Box<dyn Error + Send>> {
 pub async fn transfer(
     mut inbound: TcpStream,
-    resource: State,
+    resource: state::State,
     id: String,
 ) -> Result<(), Box<dyn Error + Sync + Send>> {
     let resource_read = resource.inner.read().await;

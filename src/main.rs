@@ -10,29 +10,10 @@ use std::env;
 use std::error::Error;
 use std::io::Write;
 use std::iter;
-use std::net::SocketAddr;
-use std::net::ToSocketAddrs;
-use std::process::exit;
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::net::TcpListener;
-use tokio::sync::RwLock;
 
 mod redis_tools;
-
-#[derive(Hash, Eq, PartialEq, Debug, Clone)]
-pub struct Inner {
-    master: String,
-    sentinel_addr: SocketAddr,
-    sentinel_timeout: Duration,
-    last_known_master: SocketAddr,
-    discovered_masters: Vec<SocketAddr>,
-}
-
-#[derive(Debug, Clone)]
-pub struct State {
-    pub inner: Arc<RwLock<Inner>>,
-}
+mod state;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -109,83 +90,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Get listen address and master name
     let listen_addr = opts.value_of("listen").unwrap().to_string();
-    let master = opts.value_of("master").unwrap().to_string();
 
-    // Get sentinel address, convert to socket
-    let sentinel_addr_resolve = opts
-        .value_of("sentinel")
-        .unwrap()
-        .to_string()
-        .to_socket_addrs();
-
-    // Get resolved sentinel address
-    let sentinel_addr = match sentinel_addr_resolve {
-        Ok(mut address) => address.next().unwrap(),
-        Err(e) => {
-            log::error!("Error resolving sentinel address: {}", e);
-            exit(2)
-        }
-    };
-
-    // Get sentinel timeout u64
-    let sentinel_timeout_u64 = match opts
-        .value_of("sentinel_timeout")
-        .unwrap()
-        .to_string()
-        .parse::<u64>()
-    {
-        Ok(p) => {
-            log::info!("Using a {}ms sentinel timeout", p);
-            p
-        }
-        Err(e) => {
-            log::error!("Error parsing sentinel_timeout: {}", e);
-            exit(2)
-        }
-    };
-
-    // Get sentinel timeout Duration
-    let sentinel_timeout = Duration::from_millis(sentinel_timeout_u64);
-
-    // Get current master, and save into resource
-    let current_master_addr = match redis_tools::get_current_master(
-        &sentinel_addr,
-        &master,
-        &"start",
-        sentinel_timeout,
-    ) {
-        Ok(socket) => {
-            log::info!("Current master socket: {}", &socket);
-            socket
-        }
-        Err(e) => {
-            log::error!("Error connecting to sentinel: {}", e);
-            exit(2)
-        }
-    };
-
-    // Created discovered_masters, and add any connected slaves
-    let discovered_masters = match redis_tools::get_slave(&current_master_addr) {
-        Ok(slave) => {
-            log::info!("Discovered slave connected to master: {}", &slave);
-            vec![current_master_addr, slave]
-        },
-        Err(_) => vec![current_master_addr]
-    };
-
-    // Create initial State
-    let state = Inner {
-        master: master.clone(),
-        sentinel_addr,
-        sentinel_timeout,
-        last_known_master: current_master_addr,
-        discovered_masters
-    };
-
-    // Create shared resource in order to safely pass the current master socket
-    let resource = State {
-        inner: Arc::new(RwLock::new(state)),
-    };
+    // Create state
+    let resource = state::State::new(opts)?;
 
     let net2_socket = TcpBuilder::new_v4()
         .unwrap()
@@ -197,6 +104,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .unwrap();
 
     let mut listener = TcpListener::from_std(net2_socket)?;
+
     log::info!("Listening on: {}", listen_addr);
 
     while let Ok((inbound, client)) = listener.accept().await {
