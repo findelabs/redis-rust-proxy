@@ -35,7 +35,7 @@ pub fn create_redis_url(master_addr: &SocketAddr, password: &str) -> Result<Url,
     let mut master_connection_url =
         parse_redis_url(&master_connection_str).expect("failed to parse redis url");
     
-    if password == "" {
+    if password != "" {
         master_connection_url.set_password(Some(password)).expect("Could not set password in redis url");
     };
 
