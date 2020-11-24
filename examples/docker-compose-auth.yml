@@ -2,21 +2,21 @@ version: "3.2"
 services:
   redis-master:
     image: "redis:alpine"
-    command: redis-server /data/redis.conf
+    command: redis-server /data/redis-auth.conf
     volumes:
-      - ./noauth/master.conf:/data/redis.conf
+      - ./auth/master-auth.conf:/data/redis-auth.conf
   redis-slave:
     image: "redis:alpine"
-    command: redis-server /data/redis.conf
+    command: redis-server /data/redis-auth.conf
     volumes:
-      - ./noauth/slave.conf:/data/redis.conf
+      - ./auth/slave-auth.conf:/data/redis-auth.conf
     depends_on:
     - redis-master
   redis-sentinel:
     image: "redis:alpine"
-    command: redis-server /data/sentinel.conf --sentinel
+    command: redis-server /data/sentinel-auth.conf --sentinel
     volumes:
-      - ./noauth/sentinel.conf:/data/sentinel.conf:rw
+      - ./auth/sentinel-auth.conf:/data/sentinel-auth.conf:rw
     depends_on:
     - redis-master
     - redis-slave
@@ -27,6 +27,7 @@ services:
     - MASTER_NAME=mymaster
     - SENTINEL_ADDR=redis-sentinel:26379
     - SENTINEL_TIMEOUT=1
+    - REDIS_PASSWORD=test
     ports:
     - 6379:6379
     depends_on:
