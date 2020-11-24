@@ -104,7 +104,7 @@ pub fn get_current_master(
         .arg(master)
         .query(&mut con)
         .map_err(|e| {
-            log::info!("{} - Failed to get current master from sentinel: {}", id, e);
+            log::error!("{} - Failed to get current master from sentinel: {}", id, e);
         })
         .unwrap();
 
@@ -134,7 +134,7 @@ pub fn find_master(discovered_masters: Vec<SocketAddr>, id: &str) -> Option<Sock
                 continue;
             }
             Err(e) => {
-                log::info!("{} - {} error checking for master: {}", id, &master, e);
+                log::error!("{} - {} error checking for master: {}", id, &master, e);
                 continue;
             }
         };
@@ -160,7 +160,7 @@ pub async fn transfer(
     ) {
         Ok(socket) => socket,
         Err(e) => {
-            log::info!("{} - Error getting current master from sentinel: {}", id, e);
+            log::error!("{} - Error getting current master from sentinel: {}", id, e);
 
             // First, check if the last known master is STILL the master. If it is not,
             // then go through all discovered masters to find the current master
@@ -187,7 +187,7 @@ pub async fn transfer(
                     match find_master(resource_read.discovered_masters.clone(), &id) {
                         Some(s) => s,
                         None => {
-                            log::info!("{} - Could not locate the current master, defaulting to last master: {}", id, known_master_socket);
+                            log::error!("{} - Could not locate the current master, defaulting to last master: {}", id, known_master_socket);
                             known_master_socket
                         }
                     }
@@ -206,8 +206,24 @@ pub async fn transfer(
         // Update current master
         resource_locked.last_known_master = current_master_addr;
 
-        // Update discovered_masters
-        resource_locked.discovered_masters.push(current_master_addr);
+        // Update discovered_masters if vec does not already contain the addr
+        match resource_locked.discovered_masters.contains(&current_master_addr) {
+            true => {
+                log::info!(
+                    "{} - New master {} already in discovered caches",
+                    id,
+                    &current_master_addr.to_string()
+                );
+            },
+            false => {
+                log::info!(
+                    "{} - Added new master {} to discovered caches",
+                    id,
+                    &current_master_addr.to_string()
+                );
+                resource_locked.discovered_masters.push(current_master_addr);
+            }
+        };
 
         // Check for any new connected slave
         if let Ok(slave) = get_slave(&current_master_addr) {
