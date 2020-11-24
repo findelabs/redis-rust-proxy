@@ -29,14 +29,16 @@ impl fmt::Display for RedisToolsError {
     }
 }
 
-pub fn create_redis_url(master_addr: &SocketAddr, password: &str) -> Result<Url, Box<dyn Error>> {
+pub fn create_redis_url(master_addr: &SocketAddr, password: &str, auth: bool) -> Result<Url, Box<dyn Error>> {
     let master_connection_format = format!("redis://{}", master_addr);
     let master_connection_str: &str = &master_connection_format[..];
     let mut master_connection_url =
         parse_redis_url(&master_connection_str).expect("failed to parse redis url");
     
-    if password != "" {
-        master_connection_url.set_password(Some(password)).expect("Could not set password in redis url");
+    if auth {
+        if password != "" {
+            master_connection_url.set_password(Some(password)).expect("Could not set password in redis url");
+        };
     };
 
     Ok(master_connection_url)
@@ -46,7 +48,7 @@ pub fn create_redis_url(master_addr: &SocketAddr, password: &str) -> Result<Url,
 pub fn is_master(master_addr: &SocketAddr, password: &str) -> Result<bool, Box<dyn Error>> {
     
     // Create redis url
-    let master_connection_url = create_redis_url(master_addr, password)?;
+    let master_connection_url = create_redis_url(master_addr, password, true)?;
 
     let client = redis::Client::open(master_connection_url)?;
     let mut con = client.get_connection()?;
@@ -64,7 +66,7 @@ pub fn is_master(master_addr: &SocketAddr, password: &str) -> Result<bool, Box<d
 pub fn get_slave(master_addr: &SocketAddr, password: &str) -> Result<SocketAddr, Box<dyn Error>> {
     
     // Create redis url
-    let master_connection_url = create_redis_url(master_addr, password)?;
+    let master_connection_url = create_redis_url(master_addr, password, true)?;
 
     let client = redis::Client::open(master_connection_url)?;
     let mut con = client.get_connection()?;
@@ -104,7 +106,7 @@ pub fn get_current_master(
     sentinel_timeout: Duration,
     password: &str
 ) -> Result<SocketAddr, Box<dyn Error>> {
-    let sentinel_connection_url = create_redis_url(sentinel_addr, password)?;
+    let sentinel_connection_url = create_redis_url(sentinel_addr, password, false)?;
 
     // Establish connection, or return error
     let client = redis::Client::open(sentinel_connection_url)?;
