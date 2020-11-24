@@ -21,7 +21,7 @@ services:
     - redis-master
     - redis-slave
   redis-proxy:
-    image: "findelabs/redis-rust-proxy:0.2.4"
+    image: "findelabs/redis-rust-proxy:latest"
     environment:
     - LISTEN=0.0.0.0:6379
     - MASTER=mymaster
