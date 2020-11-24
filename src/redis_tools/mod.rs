@@ -8,6 +8,7 @@ use std::time::Duration;
 use tokio::io;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
+use url::Url;
 
 use crate::state;
 
@@ -28,12 +29,24 @@ impl fmt::Display for RedisToolsError {
     }
 }
 
-// Find out if cache is the master, and return None if any errors are encountered
-pub fn is_master(master_addr: &SocketAddr) -> Result<bool, Box<dyn Error>> {
+pub fn create_redis_url(master_addr: &SocketAddr, password: &str) -> Result<Url, Box<dyn Error>> {
     let master_connection_format = format!("redis://{}", master_addr);
     let master_connection_str: &str = &master_connection_format[..];
-    let master_connection_url =
+    let mut master_connection_url =
         parse_redis_url(&master_connection_str).expect("failed to parse redis url");
+    
+    if password == "" {
+        master_connection_url.set_password(Some(password)).expect("Could not set password in redis url");
+    };
+
+    Ok(master_connection_url)
+}
+
+// Find out if cache is the master, and return None if any errors are encountered
+pub fn is_master(master_addr: &SocketAddr, password: &str) -> Result<bool, Box<dyn Error>> {
+    
+    // Create redis url
+    let master_connection_url = create_redis_url(master_addr, password)?;
 
     let client = redis::Client::open(master_connection_url)?;
     let mut con = client.get_connection()?;
@@ -48,11 +61,10 @@ pub fn is_master(master_addr: &SocketAddr) -> Result<bool, Box<dyn Error>> {
 }
 
 // Return connected slave to cache
-pub fn get_slave(master_addr: &SocketAddr) -> Result<SocketAddr, Box<dyn Error>> {
-    let master_connection_format = format!("redis://{}", master_addr);
-    let master_connection_str: &str = &master_connection_format[..];
-    let master_connection_url =
-        parse_redis_url(&master_connection_str).expect("failed to parse redis url");
+pub fn get_slave(master_addr: &SocketAddr, password: &str) -> Result<SocketAddr, Box<dyn Error>> {
+    
+    // Create redis url
+    let master_connection_url = create_redis_url(master_addr, password)?;
 
     let client = redis::Client::open(master_connection_url)?;
     let mut con = client.get_connection()?;
@@ -90,10 +102,9 @@ pub fn get_current_master(
     master: &str,
     id: &str,
     sentinel_timeout: Duration,
+    password: &str
 ) -> Result<SocketAddr, Box<dyn Error>> {
-    let sentinel_connection_format = format!("redis://{}", sentinel_addr);
-    let sentinel_connection_str: &str = &sentinel_connection_format[..];
-    let sentinel_connection_url = parse_redis_url(&sentinel_connection_str).unwrap();
+    let sentinel_connection_url = create_redis_url(sentinel_addr, password)?;
 
     // Establish connection, or return error
     let client = redis::Client::open(sentinel_connection_url)?;
@@ -115,7 +126,7 @@ pub fn get_current_master(
 }
 
 // Look for master from vector of discovered caches
-pub fn find_master(discovered_masters: Vec<SocketAddr>, id: &str) -> Option<SocketAddr> {
+pub fn find_master(discovered_masters: Vec<SocketAddr>, id: &str, password: &str) -> Option<SocketAddr> {
     let masters_pretty: Vec<String> = discovered_masters.iter().map(|v| v.to_string()).collect();
 
     log::info!(
@@ -124,7 +135,7 @@ pub fn find_master(discovered_masters: Vec<SocketAddr>, id: &str) -> Option<Sock
         &masters_pretty.join(", ")
     );
     for master in discovered_masters {
-        match is_master(&master) {
+        match is_master(&master, password) {
             Ok(true) => {
                 log::info!("{} - Found the master: {}", id, &master);
                 return Some(master);
@@ -157,6 +168,7 @@ pub async fn transfer(
         &resource_read.master,
         &id,
         resource_read.sentinel_timeout,
+        &resource_read.password
     ) {
         Ok(socket) => socket,
         Err(e) => {
@@ -169,7 +181,7 @@ pub async fn transfer(
                 id,
                 known_master_socket
             );
-            match is_master(&known_master_socket) {
+            match is_master(&known_master_socket, &resource_read.password) {
                 Ok(true) => {
                     log::info!(
                         "{} - Looks like {} is still the master",
@@ -184,7 +196,7 @@ pub async fn transfer(
                         id,
                         &known_master_socket
                     );
-                    match find_master(resource_read.discovered_masters.clone(), &id) {
+                    match find_master(resource_read.discovered_masters.clone(), &id, &resource_read.password) {
                         Some(s) => s,
                         None => {
                             log::error!("{} - Could not locate the current master, defaulting to last master: {}", id, known_master_socket);
@@ -226,7 +238,7 @@ pub async fn transfer(
         };
 
         // Check for any new connected slave
-        if let Ok(slave) = get_slave(&current_master_addr) {
+        if let Ok(slave) = get_slave(&current_master_addr, &resource_locked.password) {
             if !resource_locked.discovered_masters.contains(&slave) {
                 log::info!(
                     "{} - Added slave {} to discovered caches",

@@ -16,6 +16,7 @@ pub struct Inner {
     pub sentinel_timeout: Duration,
     pub last_known_master: SocketAddr,
     pub discovered_masters: Vec<SocketAddr>,
+    pub password: String
 }
 
 #[derive(Debug, Clone)]
@@ -64,12 +65,19 @@ impl State {
         // Get sentinel timeout Duration
         let sentinel_timeout = Duration::from_millis(sentinel_timeout_u64);
 
+        // Get password
+        let password = opts
+            .value_of("password")
+            .unwrap()
+            .to_string();
+
         // Get current master, and save into resource
         let current_master_addr = match redis_tools::get_current_master(
             &sentinel_addr,
             &master,
             &"start",
             sentinel_timeout,
+            &password
         ) {
             Ok(socket) => {
                 log::info!("Current master socket: {}", &socket);
@@ -82,7 +90,7 @@ impl State {
         };
 
         // Created discovered_masters, and add any connected slaves
-        let discovered_masters = match redis_tools::get_slave(&current_master_addr) {
+        let discovered_masters = match redis_tools::get_slave(&current_master_addr, &password) {
             Ok(slave) => {
                 log::info!("Discovered slave connected to master: {}", &slave);
                 vec![current_master_addr, slave]
@@ -97,6 +105,7 @@ impl State {
             sentinel_timeout,
             last_known_master: current_master_addr,
             discovered_masters,
+            password
         };
 
         Ok(Self {

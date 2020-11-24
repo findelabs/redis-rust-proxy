@@ -28,9 +28,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .short("m")
                 .long("master")
                 .required(true)
-                .value_name("MASTER")
+                .value_name("master")
                 .help("the sentinel's name for the cache")
-                .env("MASTER")
+                .env("MASTER_NAME")
                 .takes_value(true),
         )
         .arg(
@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .help("listening socket")
                 .required(false)
                 .default_value("0.0.0.0:6379")
-                .env("LISTEN")
+                .env("LISTEN_ADDR")
                 .takes_value(true),
         )
         .arg(
@@ -50,7 +50,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .long("sentinel")
                 .help("sentinel address")
                 .required(true)
-                .env("SENTINEL")
+                .env("SENTINEL_ADDR")
                 .takes_value(true),
         )
         .arg(
@@ -70,6 +70,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .help("enable debugging")
                 .required(false)
                 .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("password")
+                .short("p")
+                .long("password")
+                .help("use redis auth")
+                .required(false)
+                .default_value("")
+                .env("REDIS_PASSWORD")
+                .takes_value(true),
         )
         .get_matches();
 

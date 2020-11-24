@@ -23,9 +23,9 @@ services:
   redis-proxy:
     image: "findelabs/redis-rust-proxy:latest"
     environment:
-    - LISTEN=0.0.0.0:6379
-    - MASTER=mymaster
-    - SENTINEL=redis-sentinel:26379
+    - LISTEN_ADDR=0.0.0.0:6379
+    - MASTER_NAME=mymaster
+    - SENTINEL_ADDR=redis-sentinel:26379
     - SENTINEL_TIMEOUT=1
     ports:
     - 6379:6379

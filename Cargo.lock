@@ -884,6 +884,7 @@ dependencies = [
  "rand",
  "redis",
  "tokio",
+ "url",
 ]
 
 [[package]]
