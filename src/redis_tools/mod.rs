@@ -29,16 +29,20 @@ impl fmt::Display for RedisToolsError {
     }
 }
 
-pub fn create_redis_url(master_addr: &SocketAddr, password: &str, auth: bool) -> Result<Url, Box<dyn Error>> {
+pub fn create_redis_url(
+    master_addr: &SocketAddr,
+    password: &str,
+    auth: bool,
+) -> Result<Url, Box<dyn Error>> {
     let master_connection_format = format!("redis://{}", master_addr);
     let master_connection_str: &str = &master_connection_format[..];
     let mut master_connection_url =
         parse_redis_url(&master_connection_str).expect("failed to parse redis url");
-    
-    if auth {
-        if password != "" {
-            master_connection_url.set_password(Some(password)).expect("Could not set password in redis url");
-        };
+
+    if auth && password != "" {
+        master_connection_url
+            .set_password(Some(password))
+            .expect("Could not set password in redis url");
     };
 
     Ok(master_connection_url)
@@ -46,7 +50,6 @@ pub fn create_redis_url(master_addr: &SocketAddr, password: &str, auth: bool) ->
 
 // Find out if cache is the master, and return None if any errors are encountered
 pub fn is_master(master_addr: &SocketAddr, password: &str) -> Result<bool, Box<dyn Error>> {
-    
     // Create redis url
     let master_connection_url = create_redis_url(master_addr, password, true)?;
 
@@ -64,7 +67,6 @@ pub fn is_master(master_addr: &SocketAddr, password: &str) -> Result<bool, Box<d
 
 // Return connected slave to cache
 pub fn get_slave(master_addr: &SocketAddr, password: &str) -> Result<SocketAddr, Box<dyn Error>> {
-    
     // Create redis url
     let master_connection_url = create_redis_url(master_addr, password, true)?;
 
@@ -104,7 +106,7 @@ pub fn get_current_master(
     master: &str,
     id: &str,
     sentinel_timeout: Duration,
-    password: &str
+    password: &str,
 ) -> Result<SocketAddr, Box<dyn Error>> {
     let sentinel_connection_url = create_redis_url(sentinel_addr, password, false)?;
 
@@ -128,7 +130,11 @@ pub fn get_current_master(
 }
 
 // Look for master from vector of discovered caches
-pub fn find_master(discovered_masters: Vec<SocketAddr>, id: &str, password: &str) -> Option<SocketAddr> {
+pub fn find_master(
+    discovered_masters: Vec<SocketAddr>,
+    id: &str,
+    password: &str,
+) -> Option<SocketAddr> {
     let masters_pretty: Vec<String> = discovered_masters.iter().map(|v| v.to_string()).collect();
 
     log::info!(
@@ -170,7 +176,7 @@ pub async fn transfer(
         &resource_read.master,
         &id,
         resource_read.sentinel_timeout,
-        &resource_read.password
+        &resource_read.password,
     ) {
         Ok(socket) => socket,
         Err(e) => {
@@ -198,7 +204,11 @@ pub async fn transfer(
                         id,
                         &known_master_socket
                     );
-                    match find_master(resource_read.discovered_masters.clone(), &id, &resource_read.password) {
+                    match find_master(
+                        resource_read.discovered_masters.clone(),
+                        &id,
+                        &resource_read.password,
+                    ) {
                         Some(s) => s,
                         None => {
                             log::error!("{} - Could not locate the current master, defaulting to last master: {}", id, known_master_socket);
@@ -221,14 +231,17 @@ pub async fn transfer(
         resource_locked.last_known_master = current_master_addr;
 
         // Update discovered_masters if vec does not already contain the addr
-        match resource_locked.discovered_masters.contains(&current_master_addr) {
+        match resource_locked
+            .discovered_masters
+            .contains(&current_master_addr)
+        {
             true => {
                 log::info!(
                     "{} - New master {} already in discovered caches",
                     id,
                     &current_master_addr.to_string()
                 );
-            },
+            }
             false => {
                 log::info!(
                     "{} - Added new master {} to discovered caches",
