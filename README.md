@@ -12,17 +12,21 @@ cargo install --git https://github.com/findelabs/redis-rust-proxy.git
 ### Arguments
 
 ```
-# Required
---master: 
-    Specify the redis master name, env MASTER.
---sentinel: 
-    Specify the redis sentinel socket, env SENTINEL.
+USAGE:
+    redis-rust-proxy [FLAGS] [OPTIONS] --master <master> --sentinel <sentinel>
 
-# Optional
---listen: 
-    Specify the listening socket for the proxy, env LISTEN. Default 0.0.0.0:6379
---sentinel_timeout: 
-    Change the sentinel timeout, env SENTINEL_TIMEOUT. Default 10 (ms)
+FLAGS:
+    -d, --debug      enable debugging
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+OPTIONS:
+    -l, --listen <socket>                        listening socket [env: LISTEN_ADDR=]  [default: 0.0.0.0:6379]
+    -m, --master <master>                        the sentinel's name for the cache [env: MASTER_NAME=]
+    -p, --password <password>                    use redis auth [env: REDIS_PASSWORD=]  [default: ]
+    -s, --sentinel <sentinel>                    sentinel address [env: SENTINEL_ADDR=]
+    -t, --sentinel_timeout <sentinel_timeout>    sentinel connection timeout [env: SENTINEL_TIMEOUT=]  [default: 10]
+
 ```
 
 ### Testing
