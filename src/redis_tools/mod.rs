@@ -119,7 +119,7 @@ pub fn get_current_master(
         .map_err(|e| {
             log::error!("{} - Failed to get current master from sentinel: {}", id, e);
         })
-        .unwrap();
+        .expect("Error getting master from sentinel");
 
     let current_master_socket = format!("{}:{}", &current_master_info[0], &current_master_info[1]);
     let current_master_socket = current_master_socket.parse::<SocketAddr>()?;
