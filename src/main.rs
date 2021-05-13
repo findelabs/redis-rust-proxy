@@ -11,6 +11,8 @@ use std::error::Error;
 use std::io::Write;
 use std::iter;
 use tokio::net::TcpListener;
+use std::time::Duration;
+use std::process::exit;
 
 mod redis_tools;
 mod state;
@@ -101,9 +103,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Get listen address and master name
     let listen_addr = opts.value_of("listen").unwrap().to_string();
 
-    // Create state
-    let resource = state::State::new(opts)?;
-
     let net2_socket = TcpBuilder::new_v4()
         .unwrap()
         .reuse_address(true)
@@ -114,6 +113,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .unwrap();
 
     let mut listener = TcpListener::from_std(net2_socket)?;
+
+    // Get sentinel timeout u64
+    let sentinel_timeout_u64 = match opts
+        .value_of("sentinel_timeout")
+        .unwrap()
+        .to_string()
+        .parse::<u64>()
+    {
+        Ok(p) => {
+            log::info!("Using a {}ms sentinel timeout", p);
+            p
+        }
+        Err(e) => {
+            log::error!("Error parsing sentinel_timeout: {}", e);
+            exit(2)
+        }
+    };
+
+    // Get sentinel timeout Duration
+    let sentinel_timeout = Duration::from_millis(sentinel_timeout_u64);
+
+    // Create state
+    let resource = state::State::new(opts, sentinel_timeout)?;
 
     log::info!("Listening on: {}", listen_addr);
 
@@ -127,7 +149,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         log::info!("{} - New connection from {}", &id, &client);
 
-        let transfer = redis_tools::transfer(inbound, resource.clone(), id.clone()).map(move |r| {
+        let transfer = redis_tools::transfer(inbound, resource.clone(), id.clone(), sentinel_timeout).map(move |r| {
             match r {
                 Ok(_) => {
                     log::info!("{} - Connection completed", id);

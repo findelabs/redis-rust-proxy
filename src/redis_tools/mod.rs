@@ -66,12 +66,12 @@ pub fn is_master(master_addr: &SocketAddr, password: &str) -> Result<bool, Box<d
 }
 
 // Return connected slave to cache
-pub fn get_slave(master_addr: &SocketAddr, password: &str) -> Result<SocketAddr, Box<dyn Error>> {
+pub fn get_slave(master_addr: &SocketAddr, password: &str, sentinel_timeout: Duration) -> Result<SocketAddr, Box<dyn Error>> {
     // Create redis url
     let master_connection_url = create_redis_url(master_addr, password, true)?;
 
     let client = redis::Client::open(master_connection_url)?;
-    let mut con = client.get_connection()?;
+    let mut con = client.get_connection_with_timeout(sentinel_timeout)?;
 
     let info: redis::InfoDict = redis::cmd("INFO").query(&mut con)?;
     let slave0_map = match info.get::<String>("slave0") {
@@ -166,6 +166,7 @@ pub async fn transfer(
     mut inbound: TcpStream,
     resource: state::State,
     id: String,
+    sentinel_timeout: Duration,
 ) -> Result<(), Box<dyn Error + Sync + Send>> {
     let resource_read = resource.inner.read().await;
     let known_master_socket = resource_read.last_known_master;
@@ -253,7 +254,7 @@ pub async fn transfer(
         };
 
         // Check for any new connected slave
-        if let Ok(slave) = get_slave(&current_master_addr, &resource_locked.password) {
+        if let Ok(slave) = get_slave(&current_master_addr, &resource_locked.password, sentinel_timeout) {
             if !resource_locked.discovered_masters.contains(&slave) {
                 log::info!(
                     "{} - Added slave {} to discovered caches",
